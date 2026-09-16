@@ -1,0 +1,43 @@
+import streamlit as st
+import pandas as pd
+from pathlib import Path
+
+st.set_page_config(page_title="Vinted Resale Scanner", page_icon="🔎", layout="wide")
+
+BRAND_MULTIPLIERS = {
+    "nike": 1.45, "adidas": 1.35, "carhartt": 1.55, "ralph lauren": 1.5,
+    "burberry": 1.8, "stone island": 1.8, "the north face": 1.5,
+    "patagonia": 1.45, "levis": 1.25, "polo": 1.25
+}
+COND_MULT = {"new": 1.25, "new without tags": 1.2, "very good": 1.05, "good": 0.9, "satisfactory": 0.75}
+
+def estimate_resale(row):
+    price = float(row.get("price_huf", 0) or 0)
+    brand = str(row.get("brand", "")).lower()
+    cond = str(row.get("condition", "")).lower()
+    mult = BRAND_MULTIPLIERS.get(brand, 1.0)
+    cm = next((v for k, v in COND_MULT.items() if k in cond), 0.85)
+    # Conservative estimate; user can change the formula for their own market.
+    return round(price * mult * cm * 1.8 / 100) * 100
+
+def score(row):
+    buy = float(row.get("price_huf", 0) or 0)
+    resale = estimate_resale(row)
+    profit = resale - buy
+    roi = (profit / buy * 100) if buy else 0
+    return max(0, round(min(100, roi * 0.65 + (profit / 100) * 0.25), 1))
+
+st.title("🔎 Vinted Resale Scanner")
+st.caption("Starter scanner for your own listing data. No scraping or anti-bot bypass is included.")
+
+uploaded = st.file_uploader("Upload listings CSV", type=["csv"])
+if uploaded:
+    df = pd.read_csv(uploaded)
+else:
+    sample = Path("data/listings.csv")
+    if sample.exists():
+        df = pd.read_csv(sample)
+    else:
+        df = pd.DataFrame(columns=["title","brand","size","condition","price_huf","category","url"])
+
+if df.empty:
