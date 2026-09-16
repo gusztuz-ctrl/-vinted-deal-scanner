@@ -41,3 +41,32 @@ else:
         df = pd.DataFrame(columns=["title","brand","size","condition","price_huf","category","url"])
 
 if df.empty:
+st.info("Upload a CSV with listing data to start.")
+    st.stop()
+
+required = ["title", "brand", "condition", "price_huf"]
+missing = [c for c in required if c not in df.columns]
+if missing:
+    st.error(f"Missing columns: {', '.join(missing)}")
+    st.stop()
+
+df["price_huf"] = pd.to_numeric(df["price_huf"], errors="coerce").fillna(0)
+df["estimated_resale_huf"] = df.apply(estimate_resale, axis=1)
+df["estimated_profit_huf"] = df["estimated_resale_huf"] - df["price_huf"]
+df["roi_pct"] = (df["estimated_profit_huf"] / df["price_huf"].replace(0, pd.NA) * 100).fillna(0).round(1)
+col1, col2, col3 = st.columns(3)
+with col1:
+    max_price = st.number_input("Max buy price (Ft)", min_value=0, value=10000, step=500)
+with col2:
+    min_profit = st.number_input("Min estimated profit (Ft)", min_value=0, value=3000, step=500)
+with col3:
+    min_score = st.slider("Min score", 0, 100, 40)
+
+result = df[(df.price_huf <= max_price) & (df.estimated_profit_huf >= min_profit) & (df.score >= min_score)].copy()
+result = result.sort_values(["score", "estimated_profit_huf"], ascending=False)
+
+st.subheader(f"Potential opportunities: {len(result)}")
+show_cols = [c for c in ["score","title","brand","size","condition","price_huf","estimated_resale_huf","estimated_profit_huf","roi_pct","category","url"] if c in result.columns]
+st.dataframe(result[show_cols], use_container_width=True, hide_index=True)
+
+st.download_button("Download results CSV", result.to_csv(index=False).encode("utf-8"), "scanner_results.csv", "text/csv")
